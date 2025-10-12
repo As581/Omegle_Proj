@@ -134,10 +134,10 @@ let waitingUsers = [];
 io.on("connection", (socket) => {
   console.log("New User Connected:", socket.id);
 
-  // Join room
+  // ---------------- JOIN ROOM ----------------
   socket.on("joinroom", () => {
     if (waitingUsers.length > 0) {
-      let partner = waitingUsers.shift();
+      const partner = waitingUsers.shift();
       const roomName = `${socket.id}-${partner.id}`;
 
       socket.join(roomName);
@@ -149,33 +149,41 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Chat messages
-  socket.on("message", (data) => socket.broadcast.to(data.room).emit("message", data.message));
+  // ---------------- CHAT ----------------
+  socket.on("message", (data) => {
+    socket.broadcast.to(data.room).emit("message", data.message);
+  });
 
-  // Typing indicator
-  socket.on("typing", (data) => socket.broadcast.to(data.room).emit("typing", data.user));
+  socket.on("typing", (data) => {
+    socket.broadcast.to(data.room).emit("typing", data.user);
+  });
 
-  // Next stranger
+  // ---------------- NEXT STRANGER ----------------
   socket.on("nextStranger", () => {
     waitingUsers.push(socket);
-    socket.leaveAll();
+    const rooms = Array.from(socket.rooms).filter(r => r !== socket.id);
+    rooms.forEach(r => socket.leave(r));
     socket.emit("resetChat");
     socket.emit("joinroom");
   });
 
-  // Video Call / WebRTC signaling
-  socket.on("signalingMessage", (data) => socket.broadcast.to(data.room).emit("signalingMessage", data.message));
+  // ---------------- VIDEO CALL ----------------
+  socket.on("signalingMessage", (data) => {
+    socket.broadcast.to(data.room).emit("signalingMessage", data.message);
+  });
+
   socket.on("startVideoCall", ({ room }) => socket.broadcast.to(room).emit("incomingCall"));
   socket.on("acceptCall", ({ room }) => socket.broadcast.to(room).emit("callAccepted"));
   socket.on("rejectCall", ({ room }) => socket.broadcast.to(room).emit("callRejected"));
 
-  // Disconnect
+  // ---------------- DISCONNECT ----------------
   socket.on("disconnect", () => {
     waitingUsers = waitingUsers.filter((u) => u.id !== socket.id);
     console.log("User Disconnected:", socket.id);
   });
 });
 
+// ---------------- EXPRESS SETUP ----------------
 app.set("view engine", "ejs");
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
