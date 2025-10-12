@@ -6,7 +6,7 @@ router.get('/',(req,res)=>{
      res.render("index");
 });
 router.get('/chat',(req,res)=>{
-     res.render("chat");
+     res.render("chating");
 });
 
 
