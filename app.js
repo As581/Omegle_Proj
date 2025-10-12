@@ -53,7 +53,7 @@ app.use('/',indexRouter);
 server.listen(3001);
 */
 
-const express = require("express");
+/*const express = require("express");
 const app = express();
 const indexRouter = require("./routes/index");
 const path = require("path");
@@ -117,4 +117,70 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/", indexRouter);
 
-server.listen(process.env.PORT || 3001);
+server.listen(process.env.PORT || 3001);*/
+const express = require("express");
+const app = express();
+const indexRouter = require("./routes/index");
+const path = require("path");
+require("dotenv").config();
+const http = require("http");
+const socketIO = require("socket.io");
+
+const server = http.createServer(app);
+const io = socketIO(server, { cors: { origin: "*" } });
+
+let waitingUsers = [];
+
+io.on("connection", (socket) => {
+  console.log("New User Connected:", socket.id);
+
+  // Join room
+  socket.on("joinroom", () => {
+    if (waitingUsers.length > 0) {
+      let partner = waitingUsers.shift();
+      const roomName = `${socket.id}-${partner.id}`;
+
+      socket.join(roomName);
+      partner.join(roomName);
+
+      io.to(roomName).emit("joined", roomName);
+    } else {
+      waitingUsers.push(socket);
+    }
+  });
+
+  // Chat messages
+  socket.on("message", (data) => socket.broadcast.to(data.room).emit("message", data.message));
+
+  // Typing indicator
+  socket.on("typing", (data) => socket.broadcast.to(data.room).emit("typing", data.user));
+
+  // Next stranger
+  socket.on("nextStranger", () => {
+    waitingUsers.push(socket);
+    socket.leaveAll();
+    socket.emit("resetChat");
+    socket.emit("joinroom");
+  });
+
+  // Video Call / WebRTC signaling
+  socket.on("signalingMessage", (data) => socket.broadcast.to(data.room).emit("signalingMessage", data.message));
+  socket.on("startVideoCall", ({ room }) => socket.broadcast.to(room).emit("incomingCall"));
+  socket.on("acceptCall", ({ room }) => socket.broadcast.to(room).emit("callAccepted"));
+  socket.on("rejectCall", ({ room }) => socket.broadcast.to(room).emit("callRejected"));
+
+  // Disconnect
+  socket.on("disconnect", () => {
+    waitingUsers = waitingUsers.filter((u) => u.id !== socket.id);
+    console.log("User Disconnected:", socket.id);
+  });
+});
+
+app.set("view engine", "ejs");
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, "public")));
+app.use("/", indexRouter);
+
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
